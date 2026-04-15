@@ -1,0 +1,113 @@
+server:
+  port: 8080
+
+spring:
+  config:
+    import: optional:classpath:application-local.yml
+  application:
+    name: team-rag-knowledge
+  servlet:
+    multipart:
+      max-file-size: 12MB
+      max-request-size: 12MB
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/hmdp?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      timeout: 5s
+    redis.repositories.enabled: false
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+    show-sql: false
+
+logging:
+  pattern:
+    level: "%5p traceId=%X{traceId:-} userId=%X{userId:-} sessionId=%X{sessionId:-}"
+  level:
+    root: INFO
+    com.team.rag: INFO
+
+dashscope:
+  base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+  api-key: ${DASHSCOPE_API_KEY:}
+  chat-model: ${DASHSCOPE_CHAT_MODEL:qwen-plus}
+  embedding-model: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v3}
+  embedding-dimensions: ${DASHSCOPE_EMBEDDING_DIMENSIONS:1024}
+  temperature: ${DASHSCOPE_TEMPERATURE:0.2}
+
+chat:
+  default-provider: ${CHAT_PROVIDER:dashscope}
+
+deepseek:
+  base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+  api-key: ${DEEPSEEK_API_KEY:}
+  chat-model: ${DEEPSEEK_CHAT_MODEL:deepseek-chat}
+  temperature: ${DEEPSEEK_TEMPERATURE:0.2}
+
+pinecone:
+  control-url: ${PINECONE_CONTROL_URL:https://api.pinecone.io}
+  api-key: ${PINECONE_API_KEY:}
+  api-version: ${PINECONE_API_VERSION:2025-10}
+  index-name: ${PINECONE_INDEX_NAME:team-rag-knowledge}
+  index-host: ${PINECONE_INDEX_HOST:}
+  namespace: ${PINECONE_NAMESPACE:team-rag-knowledge}
+  metric: ${PINECONE_METRIC:cosine}
+  cloud: ${PINECONE_CLOUD:aws}
+  region: ${PINECONE_REGION:us-east-1}
+  dimension: ${PINECONE_DIMENSION:1024}
+  auto-create-index: ${PINECONE_AUTO_CREATE_INDEX:true}
+
+rag:
+  admin:
+    token: ${RAG_ADMIN_TOKEN:}
+  storage:
+    upload-dir: ./data/uploads
+  chunk:
+    max-length: 800
+    overlap: 120
+  retrieval:
+    bm25-top-k: 8
+    vector-top-k: 8
+    final-top-k: 5
+    min-score: 0.1
+  answer:
+    max-citations: 4
+    history-size: 6
+    cache-ttl-minutes: 10
+    memory-summary-token-threshold: 32000
+    memory-summary-keep-messages: 8
+    max-memory-messages: 160
+  upload:
+    direct-max-file-size: 10MB
+    chunk-size: 8MB
+    max-chunk-size: 10MB
+    max-chunked-file-size: 2GB
+    daily-total-quota: 5GB
+    user-daily-quota: 1GB
+    user-total-storage-quota: 10GB
+    allowed-extensions:
+      - txt
+      - md
+      - markdown
+      - csv
+      - json
+      - xml
+      - html
+      - htm
+      - log
+      - yml
+      - yaml
+      - pdf
+      - doc
+      - docx

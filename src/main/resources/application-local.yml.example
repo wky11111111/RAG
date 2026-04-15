@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/hmdp?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: your-mysql-password
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+dashscope:
+  api-key: your-dashscope-api-key
+  chat-model: qwen-plus
+  embedding-model: text-embedding-v3
+  embedding-dimensions: 1024
+
+chat:
+  default-provider: dashscope
+
+deepseek:
+  api-key: your-deepseek-api-key
+  chat-model: deepseek-chat
+
+pinecone:
+  api-key: your-pinecone-api-key
+  index-name: team-rag-knowledge
+  namespace: team-rag-knowledge
+  cloud: aws
+  region: us-east-1
+  dimension: 1024
+  auto-create-index: true
+
+rag:
+  storage:
+    upload-dir: ./data/uploads

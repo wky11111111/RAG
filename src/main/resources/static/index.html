@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team RAG Knowledge</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="chat-shell">
+    <aside class="sidebar">
+        <div class="brand-block">
+            <div class="brand-mark">K</div>
+            <div>
+                <p class="eyebrow">Knowledge Studio</p>
+                <h1>Team RAG</h1>
+            </div>
+        </div>
+
+        <nav class="nav-menu" aria-label="主导航">
+            <button id="newConversationButton" type="button" class="nav-item active">新聊天</button>
+            <button id="openMemoryButton" type="button" class="nav-item">录入长期记忆</button>
+            <button id="openKnowledgeButton" type="button" class="nav-item">知识库管理</button>
+            <a class="nav-item" href="#advancedPanel">配置与调试</a>
+        </nav>
+
+        <section class="side-section identity-card">
+            <div class="side-head">
+                <h2>我的身份</h2>
+                <span id="currentUserLabel">未设置</span>
+            </div>
+            <div class="identity-form">
+                <input id="userIdInput" type="text" placeholder="例如：u001">
+                <button id="saveUserButton" type="button" class="mini-btn">保存</button>
+            </div>
+            <div id="userIdentityMessage" class="status">用于区分你的知识库、长期记忆和会话。</div>
+        </section>
+
+        <section class="side-section">
+            <div class="side-head">
+                <h2>最近会话</h2>
+                <span id="sessionCount">0 个会话</span>
+            </div>
+            <div id="sessionList" class="session-list empty">暂无最近会话。</div>
+        </section>
+    </aside>
+
+    <section class="chat-main">
+        <header class="topbar">
+            <div class="crumb">
+                <span>知识库问答</span>
+                <strong>Agentic RAG</strong>
+            </div>
+            <div class="header-tools">
+                <label class="model-select">
+                    <span>模型</span>
+                    <select id="aiProviderSelect">
+                        <option value="dashscope">Qwen Plus</option>
+                        <option value="deepseek">DeepSeek</option>
+                    </select>
+                </label>
+                <div class="memory-badge">
+                    <span>Memory ID：<b id="currentMemoryId">-</b></span>
+                    <span>Token：<b id="currentTokenCount">0</b>/<b id="summaryThreshold">32000</b></span>
+                </div>
+                <label class="agent-toggle toolbar-btn">
+                    <input id="agentModeToggle" type="checkbox">
+                    Agent 模式
+                </label>
+            </div>
+        </header>
+
+        <section class="chat-canvas">
+            <div class="welcome-card">
+                <p class="eyebrow">当前会话</p>
+                <h2>把你要问的内容发过来</h2>
+                <p>左侧上传知识库或录入长期记忆后，就可以在这里进行多轮问答。开启 Agent 模式后，系统会展示规划、检索、反思等步骤。</p>
+                <div class="quick-prompts" aria-label="快捷问题">
+                    <button type="button" data-prompt="请总结当前知识库的重点内容">总结知识库</button>
+                    <button type="button" data-prompt="根据知识库生成一份操作清单">生成清单</button>
+                    <button type="button" data-prompt="如果知识库依据不足，请说明缺少什么信息">检查依据</button>
+                </div>
+            </div>
+
+            <section id="chatTimeline" class="chat-timeline muted">
+                选择左侧文件上传，或点击“录入长期记忆”补充知识后，就可以开始提问。
+            </section>
+
+            <section class="result-dock">
+                <details open>
+                    <summary>本轮引用</summary>
+                    <div id="citationList" class="citation-list muted">暂无引用，回答后只展示文件名和元数据。</div>
+                </details>
+                <details>
+                    <summary>Agent 步骤</summary>
+                    <div id="agentStepList" class="agent-step-list muted">开启 Agent 模式后会显示 plan / tool / reflect。</div>
+                </details>
+            </section>
+        </section>
+
+        <form id="qaForm" class="chat-composer">
+            <button id="composerAttachButton" class="attach-btn" type="button">+</button>
+            <textarea name="query" rows="1" placeholder="有问题，尽管问" required></textarea>
+            <button type="submit" class="send-btn">发送</button>
+        </form>
+    </section>
+
+    <aside id="advancedPanel" class="advanced-panel">
+        <section class="panel-card">
+            <div class="side-head">
+                <h2>分类检索</h2>
+                <span>本轮生效</span>
+            </div>
+            <form id="filterForm" class="mini-upload">
+                <select name="sourceKind">
+                    <option value="RAG">只查 RAG 知识库</option>
+                    <option value="MEMORY">只查长期记忆</option>
+                    <option value="ALL">全部来源</option>
+                </select>
+                <input type="text" name="categoryPath" placeholder="分类前缀，例如：外卖/售后">
+                <input type="text" name="businessScene" placeholder="业务场景">
+                <input type="text" name="projectName" placeholder="项目">
+                <input type="text" name="department" placeholder="部门">
+                <input type="text" name="userId" placeholder="用户 ID，留空表示查全部">
+            </form>
+        </section>
+
+        <details class="panel-card tool-details">
+            <summary>链路日志</summary>
+            <form id="logForm" class="mini-upload">
+                <input type="text" name="traceId" placeholder="traceId">
+                <input type="text" name="userId" placeholder="或用户 ID">
+                <button id="logButton" type="submit" class="mini-btn blue-btn">查询日志</button>
+            </form>
+            <input type="text" name="traceShortcut" placeholder="顶部 traceId 快捷输入" class="hidden-control" aria-hidden="true">
+            <div id="logMessage" class="status"></div>
+            <div id="logList" class="log-list empty">暂无链路日志。</div>
+        </details>
+
+        <details class="panel-card tool-details">
+            <summary>RAG 评测</summary>
+            <form id="evaluationForm" class="mini-upload">
+                <textarea name="casesJson" rows="5" placeholder='[
+  {
+    "query": "差旅报销需要什么材料？",
+    "expectedDocumentIds": ["文档ID"]
+  }
+]'></textarea>
+                <input type="number" name="topK" placeholder="TopK，例如：5">
+                <button id="evaluationButton" type="submit" class="mini-btn">运行评测</button>
+            </form>
+            <div id="evaluationMessage" class="status"></div>
+            <div id="evaluationResult" class="policy-summary muted">暂无评测结果。</div>
+        </details>
+
+        <details class="panel-card tool-details">
+            <summary>系统提示词</summary>
+            <form id="promptForm" class="mini-upload">
+                <input type="password" name="adminToken" placeholder="管理员 Token，可选">
+                <textarea name="prompt" rows="7" placeholder="输入系统提示词"></textarea>
+                <button id="promptButton" type="submit" class="mini-btn dark-btn">保存提示词</button>
+            </form>
+            <div id="promptMessage" class="status"></div>
+        </details>
+
+        <details class="panel-card tool-details">
+            <summary>上传策略</summary>
+            <form id="policyForm" class="mini-upload collapsed-form">
+                <input type="password" name="adminToken" placeholder="管理员 Token，可选">
+                <input type="number" name="directMaxFileBytes" placeholder="普通上传上限 Byte">
+                <input type="number" name="chunkSizeBytes" placeholder="推荐分片大小 Byte">
+                <input type="number" name="maxChunkSizeBytes" placeholder="单分片最大 Byte">
+                <input type="number" name="maxChunkedFileBytes" placeholder="分片文件最大 Byte">
+                <input type="number" name="dailyTotalQuotaBytes" placeholder="系统每日总量 Byte">
+                <input type="number" name="userDailyQuotaBytes" placeholder="单用户每日总量 Byte">
+                <input type="number" name="userTotalStorageQuotaBytes" placeholder="单用户总存储 Byte">
+                <input type="text" name="allowedExtensions" placeholder="白名单，例如：txt,md,pdf,docx">
+                <button id="policyButton" type="submit" class="mini-btn">保存策略</button>
+            </form>
+            <div id="policySummary" class="policy-summary muted">正在加载上传策略...</div>
+            <div id="policyMessage" class="status"></div>
+        </details>
+    </aside>
+</main>
+
+<div id="knowledgeModal" class="modal-backdrop hidden">
+    <section class="modal-card knowledge-modal-card">
+        <div class="modal-head">
+            <div>
+                <p class="eyebrow">RAG 知识库</p>
+                <h2>上传与管理知识库</h2>
+            </div>
+            <button id="closeKnowledgeButton" type="button" class="icon-btn">关闭</button>
+        </div>
+        <p class="modal-desc">这里用于上传 RAG 文档、查看已上传文件，并支持切块预览、重索引和删除。长期记忆请使用左侧“录入长期记忆”。</p>
+        <div class="knowledge-modal-grid">
+            <section class="modal-panel">
+                <div class="side-head">
+                    <h2>上传知识库</h2>
+                    <span id="docCount">0 个文件</span>
+                </div>
+                <form id="uploadForm" class="mini-upload" enctype="multipart/form-data">
+                    <label class="file-picker">
+                        <input type="file" name="file" accept=".txt,.md,.markdown,.csv,.json,.xml,.html,.htm,.log,.yml,.yaml,.pdf,.doc,.docx,text/plain,text/markdown,application/pdf" required>
+                        <span>选择文件</span>
+                        <small>PDF / Word / Markdown / TXT</small>
+                    </label>
+                    <input type="text" name="userId" placeholder="用户 ID，例如：u001">
+                    <input type="text" name="docType" placeholder="文档类型，例如：客服手册">
+                    <input type="text" name="categoryPath" placeholder="分类，例如：外卖/售后/超时">
+                    <div class="upload-extra">
+                        <input type="text" name="businessScene" placeholder="业务场景">
+                        <input type="text" name="projectName" placeholder="项目">
+                        <input type="text" name="department" placeholder="部门">
+                        <input type="text" name="description" placeholder="说明，可选">
+                    </div>
+                    <button id="uploadButton" type="submit" class="mini-btn dark-btn">上传并索引</button>
+                </form>
+                <div id="uploadMessage" class="status"></div>
+            </section>
+
+            <section class="modal-panel">
+                <div class="side-head">
+                    <h2>知识库文件</h2>
+                    <span>元数据</span>
+                </div>
+                <div id="documentMetaList" class="document-list empty">暂无上传文件。</div>
+            </section>
+        </div>
+    </section>
+</div>
+
+<div id="memoryModal" class="modal-backdrop hidden">
+    <section class="modal-card">
+        <div class="modal-head">
+            <div>
+                <p class="eyebrow">长期记忆</p>
+                <h2>主动录入知识</h2>
+            </div>
+            <button id="closeMemoryButton" type="button" class="icon-btn">关闭</button>
+        </div>
+        <p class="modal-desc">长期记忆会以 MEMORY 来源独立保存，可按用户、会话、时间和分类单独管理。</p>
+        <form id="manualForm" class="memory-form">
+            <label><span>标题</span><input type="text" name="title" placeholder="例如：配送超时补偿规则"></label>
+            <label><span>用户 ID</span><input type="text" name="userId" placeholder="例如：u001"></label>
+            <label><span>会话 ID</span><input type="text" name="conversationId" placeholder="可选，默认当前 Memory ID"></label>
+            <label><span>分类</span><input type="text" name="categoryPath" placeholder="例如：外卖/售后/超时"></label>
+            <label><span>类型</span><input type="text" name="docType" placeholder="例如：客服规则"></label>
+            <label><span>说明</span><input type="text" name="description" placeholder="例如：用于外卖售后场景"></label>
+            <label><span>内容</span><textarea name="content" rows="9" placeholder="输入要沉淀到长期记忆的内容" required></textarea></label>
+            <button id="manualButton" type="submit" class="primary-btn">保存到长期记忆</button>
+        </form>
+        <div id="manualMessage" class="status"></div>
+    </section>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
