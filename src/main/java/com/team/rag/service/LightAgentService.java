@@ -1,9 +1,13 @@
 package com.team.rag.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team.rag.bean.AgentAnswerResponse;
 import com.team.rag.bean.AgentStep;
+import com.team.rag.bean.ChatMessage;
 import com.team.rag.bean.RagAnswerResponse;
 import com.team.rag.bean.RagQo;
+import com.team.rag.bean.RetrievedChunk;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -17,10 +21,17 @@ public class LightAgentService {
 
     private final RagQAService ragQAService;
     private final ObservabilityService observabilityService;
+    private final ChatModelService chatModelService;
+    private final ObjectMapper objectMapper;
 
-    public LightAgentService(RagQAService ragQAService, ObservabilityService observabilityService) {
+    public LightAgentService(RagQAService ragQAService,
+                             ObservabilityService observabilityService,
+                             ChatModelService chatModelService,
+                             ObjectMapper objectMapper) {
         this.ragQAService = ragQAService;
         this.observabilityService = observabilityService;
+        this.chatModelService = chatModelService;
+        this.objectMapper = objectMapper;
     }
 
     public AgentAnswerResponse qa(RagQo qo) {
@@ -43,15 +54,23 @@ public class LightAgentService {
         RagAnswerResponse response = runRagTool(working, steps, false, ignored -> {
         });
 
-        if (response.retrievedChunks().isEmpty() && !"ALL".equalsIgnoreCase(safe(working.getSourceKind()))) {
+        RetrievalEvaluation evaluation = evaluateRetrieval(qo, response.retrievedChunks());
+
+        if (!evaluation.isSufficient() && !"ALL".equalsIgnoreCase(safe(working.getSourceKind()))) {
             RagQo retry = copy(working);
             retry.setSourceKind("ALL");
             retry.setTopK(Math.max(retry.getTopK() == null ? 8 : retry.getTopK(), 8));
-            addStep(steps, "reflect", "RETRY", "首次召回为空，扩大到全部来源并二次检索", 0);
-            response = runRagTool(retry, steps, false, ignored -> {
+            addStep(steps, "reflect", "RETRY", "评估结果不佳（" + evaluation.reason() + "），扩大到全部来源并二次检索", 0);
+            
+            RagAnswerResponse retryResponse = runRagTool(retry, steps, false, ignored -> {
             });
+            RetrievalEvaluation retryEvaluation = evaluateRetrieval(qo, retryResponse.retrievedChunks());
+            addStep(steps, "reflect", retryEvaluation.isSufficient() ? "SUCCESS" : "WARN", 
+                    "二次检索评估结果：" + retryEvaluation.reason(), 0);
+            response = retryResponse;
         } else {
-            addStep(steps, "reflect", "SUCCESS", "召回结果可用于回答，无需二次检索", 0);
+            addStep(steps, "reflect", evaluation.isSufficient() ? "SUCCESS" : "WARN", 
+                    "人工评价级召回分析：" + evaluation.reason(), 0);
         }
 
         return new AgentAnswerResponse(
@@ -84,9 +103,10 @@ public class LightAgentService {
         }
 
         RagAnswerResponse response = runRagTool(working, steps, true, tokenConsumer, stepConsumer);
-        emitStep(steps, stepConsumer, "reflect", "SUCCESS",
-                response.retrievedChunks().isEmpty() ? "本次召回为空，建议补充资料或放宽分类过滤" : "召回结果可用于回答",
-                0);
+        
+        RetrievalEvaluation evaluation = evaluateRetrieval(qo, response.retrievedChunks());
+        emitStep(steps, stepConsumer, "reflect", evaluation.isSufficient() ? "SUCCESS" : "WARN",
+                "召回结果分析：" + evaluation.reason(), 0);
 
         return new AgentAnswerResponse(
                 response.answer(),
@@ -195,5 +215,67 @@ public class LightAgentService {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private record RetrievalEvaluation(boolean isSufficient, String reason) {
+    }
+
+    private RetrievalEvaluation evaluateRetrieval(RagQo qo, List<RetrievedChunk> chunks) {
+        if (chunks.isEmpty()) {
+            return new RetrievalEvaluation(false, "召回结果为空，无法提供任何信息。");
+        }
+
+        StringBuilder context = new StringBuilder();
+        for (int i = 0; i < chunks.size(); i++) {
+            context.append("【片段").append(i + 1).append("】\n");
+            context.append(chunks.get(i).content()).append("\n\n");
+        }
+
+        String prompt = """
+                你是一个检索质量评估专家。请评估以下召回片段是否包含足够且相关的信息来回答用户的问题。
+                
+                [用户问题]
+                %s
+                
+                [召回片段]
+                %s
+                
+                请判断：
+                1. 召回片段是否与问题直接相关？
+                2. 召回片段是否足以完整回答问题？
+                
+                请严格以 JSON 格式输出，包含两个字段：
+                - "isSufficient": boolean (如果足以回答返回 true，否则返回 false)
+                - "reason": string (简要说明评估理由，指出人工评价级别的优缺点、片段的贡献或缺失的信息)
+                """.formatted(qo.getQuery(), context.toString());
+
+        long start = System.currentTimeMillis();
+        try {
+            String response = chatModelService.chat(qo.getAiProvider(), List.of(new ChatMessage("user", prompt)));
+            response = response.trim();
+            if (response.startsWith("```json")) {
+                response = response.substring(7);
+            } else if (response.startsWith("```")) {
+                response = response.substring(3);
+            }
+            if (response.endsWith("```")) {
+                response = response.substring(0, response.length() - 3);
+            }
+
+            JsonNode jsonNode = objectMapper.readTree(response);
+            boolean isSufficient = jsonNode.path("isSufficient").asBoolean(false);
+            String reason = jsonNode.path("reason").asText("解析失败");
+            
+            observabilityService.record("agent", "tool.evaluate_retrieval", "SUCCESS",
+                    System.currentTimeMillis() - start, Map.of(
+                            "isSufficient", isSufficient,
+                            "reason", reason
+                    ), null);
+            return new RetrievalEvaluation(isSufficient, reason);
+        } catch (Exception e) {
+            observabilityService.record("agent", "tool.evaluate_retrieval", "ERROR",
+                    System.currentTimeMillis() - start, Map.of("error", e.getMessage()), e);
+            return new RetrievalEvaluation(true, "评估模型调用失败，默认放行：" + e.getMessage());
+        }
     }
 }
